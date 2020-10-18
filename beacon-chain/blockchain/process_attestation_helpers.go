@@ -68,8 +68,20 @@ func (s *Service) getAttPreState(ctx context.Context, c *ethpb.Checkpoint) (*sta
 // to efficiently verify attestation signature without using beacon state. This function utilizes
 // the checkpoint info cache and will update the check point info cache on miss.
 func (s *Service) getAttCheckPtInfo(ctx context.Context, c *ethpb.Checkpoint, e uint64) (*pb.CheckPtInfo, error) {
+	startSlot, err := helpers.StartSlot(e)
+	if err != nil {
+		return nil, err
+	}
+	epochRoot, err := s.ancestorByForkChoiceStore(ctx, bytesutil.ToBytes32(c.Root), startSlot)
+	if err != nil {
+		return nil, err
+	}
+	epochChPt := &ethpb.Checkpoint{
+		Root:  epochRoot,
+		Epoch: e,
+	}
 	// Return checkpoint info if exists in cache.
-	info, err := s.checkPtInfoCache.get(c)
+	info, err := s.checkPtInfoCache.get(epochChPt)
 	if err != nil {
 		return nil, errors.Wrap(err, "could not get cached checkpoint state")
 	}
@@ -118,7 +130,7 @@ func (s *Service) getAttCheckPtInfo(ctx context.Context, c *ethpb.Checkpoint, e 
 		ActiveIndices: indices,
 		PubKeys:       pks,
 	}
-	if err := s.checkPtInfoCache.put(c, info); err != nil {
+	if err := s.checkPtInfoCache.put(epochChPt, info); err != nil {
 		return nil, err
 	}
 
