@@ -137,8 +137,7 @@ func TestSplit_AttestationsWithoutMatchingProposalsAreSplit(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	splitAttestationsHistory, err :=
-		attestationsOnlyKeyStore.AttestationHistoryForPubKeys(context.Background(), [][48]byte{pubKey2})
+	splitAttestationsHistory, err := attestationsOnlyKeyStore.AttestationHistoryForPubKeysV2(context.Background(), [][48]byte{pubKey2})
 	require.NoError(t, err, "Retrieving attestation history failed for public key %v", encodedKey2)
 	require.Equal(t, attestationHistory[pubKey2][0], splitAttestationsHistory[pubKey2].TargetToSource[0], "Attestations not merged correctly")
 }
@@ -187,7 +186,7 @@ func prepareStoreAttestations(store *Store, pubKeys [][48]byte) (map[[48]byte]ma
 		storeAttestationHistory[key] = attestationHistory
 		attestations[key] = attestationHistoryMap
 	}
-	if err := store.SaveAttestationHistoryForPubKeys(context.Background(), storeAttestationHistory); err != nil {
+	if err := store.SaveAttestationHistoryForPubKeysV2(context.Background(), storeAttestationHistory); err != nil {
 		return nil, errors.Wrapf(err, "Saving attestation history failed")
 	}
 
@@ -202,10 +201,10 @@ func assertStore(t *testing.T, store *Store, pubKeys [][48]byte, expectedHistory
 		require.DeepEqual(t, expectedProposals, proposalHistory, "Proposals are incorrect")
 	}
 
-	attestationHistory, err := store.AttestationHistoryForPubKeys(context.Background(), pubKeys)
+	attestationHistory, _, err := store.AttestationHistoryForPubKeysV2(context.Background(), pubKeys)
 	require.NoError(t, err, "Retrieving attestation history failed")
 	for _, key := range pubKeys {
 		expectedAttestations := expectedHistory.Attestations[key]
-		require.Equal(t, expectedAttestations[0], attestationHistory[key].TargetToSource[0], "Attestations are incorrect")
+		require.Equal(t, expectedAttestations, attestationHistory[key], "Attestations are incorrect")
 	}
 }

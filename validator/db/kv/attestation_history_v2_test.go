@@ -4,12 +4,10 @@ import (
 	"context"
 	"testing"
 
-	slashpb "github.com/prysmaticlabs/prysm/proto/slashing"
 	"github.com/prysmaticlabs/prysm/shared/bytesutil"
 	"github.com/prysmaticlabs/prysm/shared/params"
 	"github.com/prysmaticlabs/prysm/shared/testutil/assert"
 	"github.com/prysmaticlabs/prysm/shared/testutil/require"
-	bolt "go.etcd.io/bbolt"
 )
 
 func TestNewAttestationHistoryArray(t *testing.T) {
@@ -131,7 +129,7 @@ func TestSetTargetData(t *testing.T) {
 func TestAttestationHistoryForPubKeysNew_EmptyVals(t *testing.T) {
 	pubkeys := [][48]byte{{30}, {25}, {20}}
 	db := setupDB(t, pubkeys)
-	historyForPubKeys, err := db.AttestationHistoryForPubKeysV2(context.Background(), pubkeys)
+	historyForPubKeys, minAttForPubKeys, err := db.AttestationHistoryForPubKeysV2(context.Background(), pubkeys)
 	require.NoError(t, err)
 	cleanAttHistoryForPubKeys := make(map[[48]byte]EncHistoryData)
 	clean := NewAttestationHistoryArray(0)
@@ -139,6 +137,12 @@ func TestAttestationHistoryForPubKeysNew_EmptyVals(t *testing.T) {
 		cleanAttHistoryForPubKeys[pubKey] = clean
 	}
 	require.DeepEqual(t, cleanAttHistoryForPubKeys, historyForPubKeys, "Expected attestation history epoch bits to be empty")
+	require.Equal(
+		t,
+		0,
+		len(minAttForPubKeys),
+		"Expected min attestation map to be empty",
+	)
 }
 
 func TestAttestationHistoryForPubKeysNew_OK(t *testing.T) {
@@ -146,10 +150,11 @@ func TestAttestationHistoryForPubKeysNew_OK(t *testing.T) {
 	pubkeys := [][48]byte{{30}, {25}, {20}}
 	db := setupDB(t, pubkeys)
 
-	_, err := db.AttestationHistoryForPubKeysV2(context.Background(), pubkeys)
+	_, _, err := db.AttestationHistoryForPubKeysV2(context.Background(), pubkeys)
 	require.NoError(t, err)
 
 	setAttHistoryForPubKeys := make(map[[48]byte]EncHistoryData)
+	setMinAttForPubKeys := make(map[[48]byte]MinAttestation)
 	clean := NewAttestationHistoryArray(0)
 	for i, pubKey := range pubkeys {
 		enc, err := clean.SetTargetData(ctx,
@@ -159,13 +164,15 @@ func TestAttestationHistoryForPubKeysNew_OK(t *testing.T) {
 				SigningRoot: []byte{1, 2, 3},
 			})
 		require.NoError(t, err)
+		setMinAttForPubKeys[pubKey] = MinAttestation{Source: uint64(i), Target: 10}
 		setAttHistoryForPubKeys[pubKey] = enc
 	}
-	err = db.SaveAttestationHistoryForPubKeysV2(context.Background(), setAttHistoryForPubKeys)
+	err = db.SaveAttestationHistoryForPubKeysV2(context.Background(), setAttHistoryForPubKeys, setMinAttForPubKeys)
 	require.NoError(t, err)
-	historyForPubKeys, err := db.AttestationHistoryForPubKeysV2(context.Background(), pubkeys)
+	historyForPubKeys, minAttForPubKeys, err := db.AttestationHistoryForPubKeysV2(context.Background(), pubkeys)
 	require.NoError(t, err)
-	require.DeepEqual(t, setAttHistoryForPubKeys, historyForPubKeys, "Expected attestation history epoch bits to be empty")
+	require.DeepEqual(t, setAttHistoryForPubKeys, historyForPubKeys, "Expected attestation history to match")
+	require.DeepEqual(t, setMinAttForPubKeys, minAttForPubKeys, "Expected min attestation source and target to match")
 }
 
 func TestAttestationHistoryForPubKey_OK(t *testing.T) {
@@ -173,7 +180,7 @@ func TestAttestationHistoryForPubKey_OK(t *testing.T) {
 	pubkeys := [][48]byte{{30}}
 	db := setupDB(t, pubkeys)
 
-	_, err := db.AttestationHistoryForPubKeysV2(context.Background(), pubkeys)
+	_, _, err := db.AttestationHistoryForPubKeysV2(context.Background(), pubkeys)
 	require.NoError(t, err)
 
 	history := NewAttestationHistoryArray(53999)
@@ -188,122 +195,23 @@ func TestAttestationHistoryForPubKey_OK(t *testing.T) {
 
 	err = db.SaveAttestationHistoryForPubKeyV2(context.Background(), pubkeys[0], history)
 	require.NoError(t, err)
-	historyForPubKeys, err := db.AttestationHistoryForPubKeysV2(context.Background(), pubkeys)
+	historyForPubKeys, _, err := db.AttestationHistoryForPubKeysV2(context.Background(), pubkeys)
 	require.NoError(t, err)
 	require.DeepEqual(t, history, historyForPubKeys[pubkeys[0]], "Expected attestation history epoch bits to be empty")
 }
 
-func TestStore_ImportOldAttestationFormatBadSourceFormat(t *testing.T) {
+func TestStore_MinAttestation(t *testing.T) {
 	ctx := context.Background()
-	pubKeys := [][48]byte{{3}, {4}}
-	db := setupDB(t, pubKeys)
-	err := db.update(func(tx *bolt.Tx) error {
-		bucket := tx.Bucket(historicAttestationsBucket)
-		for _, pubKey := range pubKeys {
-			if err := bucket.Put(pubKey[:], []byte{1}); err != nil {
-				return err
-			}
-		}
-		return nil
-	})
-	require.NoError(t, err)
-	require.ErrorContains(t, "could not retrieve data for public keys", db.MigrateV2AttestationProtection(ctx))
-}
+	pubkeys := [][48]byte{{30}}
+	db := setupDB(t, pubkeys)
 
-func TestStore_ImportOldAttestationFormat(t *testing.T) {
-	ctx := context.Background()
-	pubKeys := [][48]byte{{3}, {4}}
-	db := setupDB(t, pubKeys)
-
-	farFuture := params.BeaconConfig().FarFutureEpoch
-	newMap := make(map[uint64]uint64)
-	// The validator attested at target epoch 2 but had no attestations for target epochs 0 and 1.
-	newMap[0] = farFuture
-	newMap[1] = farFuture
-	newMap[2] = 1
-	history := &slashpb.AttestationHistory{
-		TargetToSource:     newMap,
-		LatestEpochWritten: 2,
-	}
-
-	newMap2 := make(map[uint64]uint64)
-	// The validator attested at target epoch 1 and 3 but had no attestations for target epochs 0 and 2.
-	newMap2[0] = farFuture
-	newMap2[1] = 0
-	newMap2[2] = farFuture
-	newMap2[3] = 2
-	history2 := &slashpb.AttestationHistory{
-		TargetToSource:     newMap2,
-		LatestEpochWritten: 3,
-	}
-
-	attestationHistory := make(map[[48]byte]*slashpb.AttestationHistory)
-	attestationHistory[pubKeys[0]] = history
-	attestationHistory[pubKeys[1]] = history2
-
-	require.NoError(t, db.SaveAttestationHistoryForPubKeys(context.Background(), attestationHistory), "Saving attestation history failed")
-	require.NoError(t, db.MigrateV2AttestationProtection(ctx), "Import attestation history failed")
-
-	attHis, err := db.AttestationHistoryForPubKeysV2(ctx, pubKeys)
+	min, err := db.MinAttestation(ctx, pubkeys[0])
 	require.NoError(t, err)
-	for pk, encHis := range attHis {
-		his, ok := attestationHistory[pk]
-		require.Equal(t, true, ok, "Missing public key in the original data")
-		lew, err := encHis.GetLatestEpochWritten(ctx)
-		require.NoError(t, err, "Failed to get latest epoch written")
-		require.Equal(t, his.LatestEpochWritten, lew, "LatestEpochWritten is not equal to the source data value")
-		for target, source := range his.TargetToSource {
-			hd, err := encHis.GetTargetData(ctx, target)
-			require.NoError(t, err, "Failed to get target data for epoch: %d", target)
-			require.Equal(t, source, hd.Source, "Source epoch is different")
-			require.DeepEqual(t, bytesutil.PadTo([]byte{1}, 32), hd.SigningRoot, "Signing root differs in imported data")
-		}
-	}
-}
-
-func TestShouldImportAttestations(t *testing.T) {
-	pubkey := [48]byte{3}
-	db := setupDB(t, [][48]byte{pubkey})
-	ctx := context.Background()
-
-	shouldImport, err := db.shouldMigrateAttestations()
+	require.Equal(t, nil, min)
+	minAtt := MinAttestation{Source: 2, Target: 10}
+	err = db.SaveMinAttestation(ctx, pubkeys[0], minAtt)
 	require.NoError(t, err)
-	require.Equal(t, false, shouldImport, "Empty bucket should not be imported")
-	newMap := make(map[uint64]uint64)
-	newMap[2] = 1
-	history := &slashpb.AttestationHistory{
-		TargetToSource:     newMap,
-		LatestEpochWritten: 2,
-	}
-	attestationHistory := make(map[[48]byte]*slashpb.AttestationHistory)
-	attestationHistory[pubkey] = history
-	err = db.SaveAttestationHistoryForPubKeys(ctx, attestationHistory)
+	min, err = db.MinAttestation(ctx, pubkeys[0])
 	require.NoError(t, err)
-	shouldImport, err = db.shouldMigrateAttestations()
-	require.NoError(t, err)
-	require.Equal(t, true, shouldImport, "Bucket with content should be imported")
-}
-
-func TestStore_UpdateAttestationProtectionDb(t *testing.T) {
-	pubkey := [48]byte{3}
-	db := setupDB(t, [][48]byte{pubkey})
-	ctx := context.Background()
-	newMap := make(map[uint64]uint64)
-	newMap[2] = 1
-	history := &slashpb.AttestationHistory{
-		TargetToSource:     newMap,
-		LatestEpochWritten: 2,
-	}
-	attestationHistory := make(map[[48]byte]*slashpb.AttestationHistory)
-	attestationHistory[pubkey] = history
-	err := db.SaveAttestationHistoryForPubKeys(ctx, attestationHistory)
-	require.NoError(t, err)
-	shouldImport, err := db.shouldMigrateAttestations()
-	require.NoError(t, err)
-	require.Equal(t, true, shouldImport, "Bucket with content should be imported")
-	err = db.MigrateV2AttestationProtectionDb(ctx)
-	require.NoError(t, err)
-	shouldImport, err = db.shouldMigrateAttestations()
-	require.NoError(t, err)
-	require.Equal(t, false, shouldImport, "Proposals should not be re-imported")
+	require.DeepEqual(t, minAtt, min, "Expected earliest attestation source and target to match the ones that were saved")
 }
