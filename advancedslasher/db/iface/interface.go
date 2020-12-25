@@ -14,5 +14,6 @@ type Database interface {
 	backuputil.BackupExporter
 	DatabasePath() string
 	ClearDB() error
-	SavePublicKey(ctx context.Context, validatorIdx uint64, pubKey []byte) error
+
+	SlasherChunkForAttestation(ctx context.Context, validatorIdx uint64, chunkIdx uint64) ([]byte, error)
 }

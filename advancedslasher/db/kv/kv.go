@@ -87,9 +87,8 @@ func NewKVStore(dirPath string, cfg *Config) (*Store, error) {
 	if err := kv.db.Update(func(tx *bolt.Tx) error {
 		return createBuckets(
 			tx,
-			indexedAttestationsBucket,
-			slashingsBucket,
-			validatorsPublicKeysBucket,
+			slasherChunkHashesBucket,
+			slasherChunksBucket,
 		)
 	}); err != nil {
 		return nil, err
