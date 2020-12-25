@@ -42,3 +42,13 @@ func (c *Config) diskKey(validatorChunkIndex uint64, chunkIndex uint64) uint64 {
 func (c *Config) cellIndex(validatorOffset uint64, chunkOffset uint64) uint64 {
 	return validatorOffset*c.chunkSize + chunkOffset
 }
+
+func (c *Config) validatorIndicesInChunk(validatorChunkIdx uint64) []uint64 {
+	validatorIndices := make([]uint64, 0)
+	low := validatorChunkIdx * c.validatorChunkSize
+	high := (validatorChunkIdx + 1) * c.validatorChunkSize
+	for i := low; i < high; i++ {
+		validatorIndices = append(validatorIndices, i)
+	}
+	return validatorIndices
+}

@@ -15,5 +15,5 @@ type Database interface {
 	DatabasePath() string
 	ClearDB() error
 
-	SlasherChunkForAttestation(ctx context.Context, validatorIdx uint64, chunkIdx uint64) ([]byte, error)
+	LatestEpochWrittenForValidator(ctx context.Context, validatorIdx uint64) (uint64, bool, error)
 }

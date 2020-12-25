@@ -18,7 +18,7 @@ func (s *Slasher) detectAttestationBatch(
 		attestationsForChunk[chunkIdx] = append(attestationsForChunk[chunkIdx], att)
 	}
 
-	s.updateArrays(validatorChunkIdx, attestationsForChunk, currentEpoch)
+	s.updateMaxArrays(validatorChunkIdx, attestationsForChunk, currentEpoch)
 
 	// Update all relevant validators for current epoch.
 	// TODO: Complete.
