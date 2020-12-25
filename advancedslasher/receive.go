@@ -32,6 +32,7 @@ func (s *Slasher) processQueuedAttestations(ctx context.Context) {
 		select {
 		case currentEpoch := <-ticker.C():
 			atts := s.attQueue.dequeue()
+			log.Infof("Epoch %d reached, processing %d queued atts", currentEpoch, len(atts))
 			if !validateAttestations(atts) {
 				// TODO: Defer is ready at a future time.
 				continue

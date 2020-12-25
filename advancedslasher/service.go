@@ -48,6 +48,6 @@ func NewSlasher(ctx context.Context, cfg *ServiceConfig) (*Slasher, error) {
 
 // Start --
 func (s *Slasher) Start() {
-	go s.processAttestations()
+	go s.processQueuedAttestations(s.ctx)
 	s.receiveAttestations(s.ctx)
 }

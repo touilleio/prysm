@@ -12,24 +12,17 @@ func (s *Slasher) detectAttestationBatch(
 	// Split the batch up into horizontal segments.
 	// Map chunk indexes in the range `0..self.config.chunk_size` to attestations
 	// for those chunks.
-}
+	attestationsForChunk := make(map[uint64][]*ethpb.IndexedAttestation)
+	for _, att := range batch {
+		chunkIdx := s.config.chunkIndex(att.Data.Source.Epoch)
+		attestationsForChunk[chunkIdx] = append(attestationsForChunk[chunkIdx], att)
+	}
 
-func (s *Slasher) processBatch() {
-}
+	s.updateArrays(validatorChunkIdx, attestationsForChunk, currentEpoch)
 
-func (s *Slasher) updateMaxTargetChunk(validatorIdx uint64, chunk []byte) {
-	//let mut epoch = start_epoch;
-	//while config.chunk_index(epoch) == chunk_index && epoch <= current_epoch {
-	//	if new_target_epoch > self.chunk.get_target(validator_index, epoch, config)? {
-	//	self.chunk
-	//	.set_target(validator_index, epoch, new_target_epoch, config)?;
-	//} else {
-	//	// We can stop.
-	//	return Ok(false);
+	// Update all relevant validators for current epoch.
+	// TODO: Complete.
+	//for validator_index in config.validator_indices_in_chunk(validator_chunk_index) {
+	//	db.update_current_epoch_for_validator(validator_index, current_epoch, txn)?;
 	//}
-	//	epoch += 1;
-	//}
-	//// If the epoch to update now lies beyond the current chunk and is less than
-	//// or equal to the current epoch, then continue to the next chunk to update it.
-	//Ok(epoch <= current_epoch)
 }
