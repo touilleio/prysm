@@ -75,6 +75,7 @@ func (s *Slasher) epochUpdateForValidator(
 	}
 }
 
+// TODO: Handle for min chunks as well.
 func (s *Slasher) applyAttestationForValidator(
 	updatedChunks map[uint64][]uint16,
 	validatorChunkIdx uint64,
@@ -82,7 +83,8 @@ func (s *Slasher) applyAttestationForValidator(
 	att *ethpb.IndexedAttestation,
 	currentEpoch uint64,
 ) {
-	chunkIdx := s.config.chunkIndex(att.Data.Source.Epoch)
+	sourceEpoch := att.Data.Source.Epoch
+	chunkIdx := s.config.chunkIndex(sourceEpoch)
 	currentChunk := s.chunkForUpdate(updatedChunks, validatorChunkIdx, chunkIdx)
 
 	// Check slashable, if so, return the slashing.
@@ -92,7 +94,24 @@ func (s *Slasher) applyAttestationForValidator(
 		return
 	}
 
+	// Get the first start epoch for max chunk.
+	var startEpoch uint64
+	if sourceEpoch < currentEpoch {
+		startEpoch = sourceEpoch + 1
+	}
+
 	// Update the chunks accordingly.
+	for {
+		chunkIdx = s.config.chunkIndex(startEpoch)
+		currentChunk = s.chunkForUpdate(updatedChunks, validatorChunkIdx, chunkIdx)
+		keepGoing := s.updateChunk(currentChunk, att.Data.Target.Epoch)
+		if !keepGoing {
+			break
+		}
+		// Get the next start epoch for max chunk.
+		// Move to first epoch of next chunk.
+		startEpoch = (startEpoch/s.config.chunkSize + 1) * s.config.chunkSize
+	}
 }
 
 func (s *Slasher) chunkForUpdate(
@@ -109,6 +128,10 @@ func (s *Slasher) chunkForUpdate(
 }
 
 func (s *Slasher) checkSlashableChunk(chunk []uint16) bool {
+	return false
+}
+
+func (s *Slasher) updateChunk(chunk []uint16, targetEpoch uint64) bool {
 	return false
 }
 
