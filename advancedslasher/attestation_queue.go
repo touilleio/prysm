@@ -14,12 +14,6 @@ func (q *attestationQueue) push(att *ethpb.IndexedAttestation) {
 	q.queue = append(q.queue, att)
 }
 
-func (q *attestationQueue) pop() *ethpb.IndexedAttestation {
-	el := q.queue[0]
-	q.queue = q.queue[1:]
-	return el
-}
-
 func (q *attestationQueue) dequeue() []*ethpb.IndexedAttestation {
 	elems := q.queue
 	q.queue = make([]*ethpb.IndexedAttestation, 0)
