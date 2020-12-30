@@ -19,9 +19,11 @@ func (s *Slasher) detectAttestationBatch(
 	}
 
 	s.updateMaxArrays(validatorChunkIdx, attestationsForChunk, currentEpoch)
+	// TODO: s.updateMinArrays(validatorChunkIdx, attestationsForChunk, currentEpoch)
 
 	// Update all relevant validators for current epoch.
 	// TODO: Complete.
+	//
 	//for validator_index in config.validator_indices_in_chunk(validator_chunk_index) {
 	//	db.update_current_epoch_for_validator(validator_index, current_epoch, txn)?;
 	//}

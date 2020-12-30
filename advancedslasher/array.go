@@ -21,7 +21,7 @@ func (s *Slasher) updateMaxArrays(
 				if validatorChunkIdx != s.config.validatorChunkIndex(validatorIdx) {
 					continue
 				}
-				s.applyAttestationForValidator(
+				s.applyAttestationForValidatorMaxChunk(
 					updatedChunks,
 					validatorChunkIdx,
 					validatorIdx,
@@ -76,7 +76,7 @@ func (s *Slasher) epochUpdateForValidator(
 }
 
 // TODO: Handle for min chunks as well.
-func (s *Slasher) applyAttestationForValidator(
+func (s *Slasher) applyAttestationForValidatorMaxChunk(
 	updatedChunks map[uint64][]uint16,
 	validatorChunkIdx uint64,
 	validatorIdx uint64,
@@ -104,7 +104,14 @@ func (s *Slasher) applyAttestationForValidator(
 	for {
 		chunkIdx = s.config.chunkIndex(startEpoch)
 		currentChunk = s.chunkForUpdate(updatedChunks, validatorChunkIdx, chunkIdx)
-		keepGoing := s.updateChunk(currentChunk, att.Data.Target.Epoch)
+		keepGoing := s.updateMaxChunk(
+			currentChunk,
+			chunkIdx,
+			validatorIdx,
+			startEpoch,
+			att.Data.Target.Epoch,
+			currentEpoch,
+		)
 		if !keepGoing {
 			break
 		}
@@ -131,8 +138,26 @@ func (s *Slasher) checkSlashableChunk(chunk []uint16) bool {
 	return false
 }
 
-func (s *Slasher) updateChunk(chunk []uint16, targetEpoch uint64) bool {
-	return false
+func (s *Slasher) updateMaxChunk(
+	chunk []uint16,
+	chunkIdx,
+	validatorIdx,
+	startEpoch,
+	newTargetEpoch,
+	currentEpoch uint64,
+) bool {
+	epoch := startEpoch
+	for s.config.chunkIndex(epoch) == chunkIdx && epoch <= currentEpoch {
+		if newTargetEpoch > s.getChunkTarget(chunk, validatorIdx, epoch) {
+			s.setChunkTarget(chunk, validatorIdx, epoch, newTargetEpoch)
+		} else {
+			return false
+		}
+		epoch += 1
+	}
+	// If the epoch to update now lies beyond the current chunk and is less than
+	// or equal to the current epoch, then continue to the next chunk to update it.
+	return epoch <= currentEpoch
 }
 
 func (s *Slasher) setRawDistance(
@@ -146,4 +171,30 @@ func (s *Slasher) setRawDistance(
 	cellIdx := s.config.cellIndex(validatorOffset, chunkOffset)
 	chunk[cellIdx] = targetDistance
 	return chunk
+}
+
+func (s *Slasher) getChunkTarget(chunk []uint16, validatorIdx, epoch uint64) uint64 {
+	if uint64(len(chunk)) != s.config.chunkSize*s.config.validatorChunkSize {
+		panic("Not right length")
+	}
+	validatorOffset := s.config.validatorOffset(validatorIdx)
+	chunkOffset := s.config.chunkOffset(epoch)
+	cellIdx := s.config.cellIndex(validatorOffset, chunkOffset)
+	if cellIdx >= uint64(len(chunk)) {
+		panic("Cell index out of bounds (print cell index)")
+	}
+	distance := chunk[cellIdx]
+	return epoch + uint64(distance)
+}
+
+func (s *Slasher) setChunkTarget(chunk []uint16, validatorIdx, epoch, targetEpoch uint64) {
+	distance := s.epochDistance(targetEpoch, epoch)
+	s.setRawDistance(chunk, validatorIdx, epoch, distance)
+}
+
+func (s *Slasher) epochDistance(epoch, baseEpoch uint64) uint16 {
+	// TODO: Check safe math.
+	distance := epoch - baseEpoch
+	// TODO: Check max distance and throw error otherwise.
+	return uint16(distance)
 }
