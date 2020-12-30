@@ -18,6 +18,7 @@ func (s *Slasher) detectAttestationBatch(
 	for _, att := range batch {
 		chunkIdx := s.config.chunkIndex(att.Data.Source.Epoch)
 		attestationsForChunk[chunkIdx] = append(attestationsForChunk[chunkIdx], att)
+		log.Infof("Detecting attestation in batch with chunk index %d", chunkIdx)
 	}
 
 	for _, validatorIdx := range s.config.validatorIndicesInChunk(validatorChunkIdx) {
