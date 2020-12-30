@@ -20,6 +20,15 @@ func (s *Slasher) detectAttestationBatch(
 		attestationsForChunk[chunkIdx] = append(attestationsForChunk[chunkIdx], att)
 	}
 
+	for _, validatorIdx := range s.config.validatorIndicesInChunk(validatorChunkIdx) {
+		for _, att := range batch {
+			err := s.slasherDB.SaveAttestationRecordForValidator(context.Background(), validatorIdx, att)
+			if err != nil {
+				panic(err)
+			}
+		}
+	}
+
 	slashings := s.updateChunks(validatorChunkIdx, attestationsForChunk, currentEpoch, minChunk)
 	moreSlashings := s.updateChunks(validatorChunkIdx, attestationsForChunk, currentEpoch, maxChunk)
 

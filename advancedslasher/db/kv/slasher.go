@@ -77,8 +77,7 @@ func (db *Store) AttestationRecordForValidator(
 
 func (db *Store) SaveAttestationRecordForValidator(
 	ctx context.Context,
-	validatorIdx,
-	targetEpoch uint64,
+	validatorIdx uint64,
 	attestation *ethpb.IndexedAttestation,
 ) error {
 	ctx, span := trace.StartSpan(ctx, "AdvancedSlasherDB.SaveAttestationRecordForValidator")
@@ -86,7 +85,7 @@ func (db *Store) SaveAttestationRecordForValidator(
 	return db.db.Update(func(tx *bolt.Tx) error {
 		bkt := tx.Bucket(attestationRecordsBucket)
 		encIdx := ssz.MarshalUint64(make([]byte, 0), validatorIdx)
-		encEpoch := ssz.MarshalUint64(make([]byte, 0), targetEpoch)
+		encEpoch := ssz.MarshalUint64(make([]byte, 0), attestation.Data.Target.Epoch)
 		key := append(encIdx, encEpoch...)
 		value := make([]byte, 16)
 		copy(value[0:8], ssz.MarshalUint64(make([]byte, 0), attestation.Data.Source.Epoch))
@@ -96,14 +95,14 @@ func (db *Store) SaveAttestationRecordForValidator(
 }
 
 func (db *Store) LoadChunk(ctx context.Context, key uint64) ([]uint16, bool, error) {
-	ctx, span := trace.StartSpan(ctx, "AdvancedSlasherDB.LatestEpochWrittenForValidator")
+	ctx, span := trace.StartSpan(ctx, "AdvancedSlasherDB.LoadChunk")
 	defer span.End()
 	var chunk []uint16
 	var exists bool
 	err := db.db.View(func(tx *bolt.Tx) error {
 		bkt := tx.Bucket(slasherChunksBucket)
-		enc := ssz.MarshalUint64(make([]byte, 0), key)
-		chunkBytes := bkt.Get(enc)
+		keyBytes := ssz.MarshalUint64(make([]byte, 0), key)
+		chunkBytes := bkt.Get(keyBytes)
 		if chunkBytes == nil {
 			return nil
 		}
@@ -119,5 +118,15 @@ func (db *Store) LoadChunk(ctx context.Context, key uint64) ([]uint16, bool, err
 }
 
 func (db *Store) SaveChunk(ctx context.Context, key uint64, chunk []uint16) error {
-	return nil
+	ctx, span := trace.StartSpan(ctx, "AdvancedSlasherDB.SaveChunk")
+	defer span.End()
+	return db.db.Update(func(tx *bolt.Tx) error {
+		bkt := tx.Bucket(slasherChunksBucket)
+		keyBytes := ssz.MarshalUint64(make([]byte, 0), key)
+		val := make([]byte, 0)
+		for i := 0; i < len(chunk); i++ {
+			val = append(val, ssz.MarshalUint16(make([]byte, 0), chunk[i])...)
+		}
+		return bkt.Put(keyBytes, val)
+	})
 }

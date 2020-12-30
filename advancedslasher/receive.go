@@ -37,8 +37,6 @@ func (s *Slasher) processQueuedAttestations(ctx context.Context) {
 				// TODO: Defer is ready at a future time.
 				continue
 			}
-			// TODO: Store indexed attestation into database.
-
 			// Group by validator index and process batches.
 			// TODO: Perform concurrently with wait groups...?
 			groupedAtts := s.groupByValidatorIndex(atts)

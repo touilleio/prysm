@@ -5,6 +5,8 @@ import (
 	"context"
 	"io"
 
+	ethpb "github.com/prysmaticlabs/ethereumapis/eth/v1alpha1"
+
 	"github.com/prysmaticlabs/prysm/advancedslasher/db/kv"
 	"github.com/prysmaticlabs/prysm/shared/backuputil"
 )
@@ -22,6 +24,11 @@ type Database interface {
 
 	// Attesting records.
 	AttestationRecordForValidator(ctx context.Context, validatorIdx, targetEpoch uint64) (*kv.AttesterRecord, error)
+	SaveAttestationRecordForValidator(
+		ctx context.Context,
+		validatorIdx uint64,
+		attestation *ethpb.IndexedAttestation,
+	) error
 
 	// Chunks.
 	LoadChunk(ctx context.Context, key uint64) ([]uint16, bool, error)
