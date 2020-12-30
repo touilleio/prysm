@@ -6,7 +6,6 @@ const (
 	DEFAULT_HISTORY_LENGTH       uint64 = 4096
 	DEFAULT_UPDATE_PERIOD        uint64 = 12
 	DEFAULT_MAX_DB_SIZE          uint64 = 256 * 1024 // 256 GiB
-	DEFAULT_BROADCAST            bool   = false
 )
 
 type Config struct {

@@ -9,10 +9,9 @@ import (
 	"path/filepath"
 
 	"github.com/pkg/errors"
-	bolt "go.etcd.io/bbolt"
-
 	"github.com/prysmaticlabs/prysm/shared/fileutil"
 	"github.com/prysmaticlabs/prysm/shared/params"
+	bolt "go.etcd.io/bbolt"
 )
 
 const (

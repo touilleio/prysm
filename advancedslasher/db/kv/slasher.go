@@ -7,6 +7,12 @@ import (
 	"go.opencensus.io/trace"
 )
 
+type AttesterRecord struct {
+	AttestationDataHash [32]byte
+	SourceEpoch         uint64
+	TargetEpoch         uint64
+}
+
 // LatestEpochWrittenForValidator --
 func (db *Store) LatestEpochWrittenForValidator(
 	ctx context.Context, validatorIdx uint64,
@@ -18,4 +24,12 @@ func (db *Store) LatestEpochWrittenForValidator(
 		return nil
 	})
 	return epoch, true, err
+}
+
+func (db *Store) AttestationRecordForValidator(
+	ctx context.Context,
+	validatorIdx,
+	targetEpoch uint64,
+) (*AttesterRecord, error) {
+	return nil, nil
 }
