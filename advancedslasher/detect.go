@@ -69,9 +69,13 @@ func (s *Slasher) updateChunks(
 	}
 
 	// Store chunks on disk.
-	//for (chunk_index, chunk) in updated_chunks {
-	//	//chunk.store(db, txn, validator_chunk_index, chunk_index, config)?;
-	//}
+	for chunkIdx, chunk := range updatedChunks {
+		key := s.config.diskKey(validatorChunkIdx, chunkIdx)
+		err := s.slasherDB.SaveChunk(context.Background(), key, chunk.Chunk())
+		if err != nil {
+			panic(err)
+		}
+	}
 	return slashings
 }
 

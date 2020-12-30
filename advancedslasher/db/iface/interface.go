@@ -16,9 +16,14 @@ type Database interface {
 	DatabasePath() string
 	ClearDB() error
 
+	// Epochs written.
 	UpdateLatestEpochWrittenForValidator(ctx context.Context, validatorIdx, epoch uint64) error
 	LatestEpochWrittenForValidator(ctx context.Context, validatorIdx uint64) (uint64, bool, error)
 
+	// Attesting records.
 	AttestationRecordForValidator(ctx context.Context, validatorIdx, targetEpoch uint64) (*kv.AttesterRecord, error)
+
+	// Chunks.
 	LoadChunk(ctx context.Context, key uint64) ([]uint16, bool, error)
+	SaveChunk(ctx context.Context, key uint64, chunk []uint16) error
 }

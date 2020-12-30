@@ -7,11 +7,11 @@ import (
 	ethpb "github.com/prysmaticlabs/ethereumapis/eth/v1alpha1"
 
 	"github.com/prysmaticlabs/prysm/shared/event"
-	"github.com/prysmaticlabs/prysm/shared/rand"
 )
 
 type MockFeeder struct {
-	feed *event.Feed
+	feed             *event.Feed
+	validatorIndices []uint64
 }
 
 func (m *MockFeeder) IndexedAttestationFeed() *event.Feed {
@@ -19,28 +19,30 @@ func (m *MockFeeder) IndexedAttestationFeed() *event.Feed {
 }
 
 func (m *MockFeeder) generateFakeAttestations(ctx context.Context) {
-	gen := rand.NewGenerator()
 	ticker := time.NewTicker(time.Millisecond * 500)
 	defer ticker.Stop()
+	currentEpoch := uint64(1)
 	for {
 		select {
 		case <-ticker.C:
-			mockIndices := make([]uint64, 10)
-			for i := 0; i < len(mockIndices); i++ {
-				mockIndices[i] = uint64(gen.Intn(16384))
-			}
 			indexedAtt := &ethpb.IndexedAttestation{
-				AttestingIndices: mockIndices,
+				AttestingIndices: m.validatorIndices,
 				Data: &ethpb.AttestationData{
 					Source: &ethpb.Checkpoint{
-						Epoch: 0,
+						Epoch: currentEpoch - 1,
 					},
 					Target: &ethpb.Checkpoint{
-						Epoch: 1,
+						Epoch: currentEpoch,
 					},
 				},
 			}
+			if currentEpoch%10 == 0 {
+				log.Infof("Simulating surround vote at epoch %d", currentEpoch)
+				// Create a surround vote.
+				indexedAtt.Data.Source.Epoch -= 1
+			}
 			m.feed.Send(indexedAtt)
+			currentEpoch++
 		case <-ctx.Done():
 			return
 		}
