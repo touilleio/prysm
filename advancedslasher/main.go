@@ -2,6 +2,8 @@ package main
 
 import (
 	"context"
+	"os"
+
 	"github.com/prysmaticlabs/prysm/advancedslasher/db/kv"
 	"github.com/prysmaticlabs/prysm/shared/event"
 
@@ -25,7 +27,15 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	mockFeeder := &MockFeeder{feed: new(event.Feed)}
+	defer func() {
+		if err := os.RemoveAll("/tmp/advancedslasher"); err != nil {
+			panic(err)
+		}
+	}()
+	mockFeeder := &MockFeeder{
+		feed:             new(event.Feed),
+		validatorIndices: []uint64{1},
+	}
 	go mockFeeder.generateFakeAttestations(ctx)
 	slasher, err := NewSlasher(ctx, &ServiceConfig{
 		Feeder:    mockFeeder,
