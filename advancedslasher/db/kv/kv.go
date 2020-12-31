@@ -3,15 +3,15 @@
 package kv
 
 import (
-	"context"
 	"os"
 	"path"
 	"path/filepath"
 
 	"github.com/pkg/errors"
+	bolt "go.etcd.io/bbolt"
+
 	"github.com/prysmaticlabs/prysm/shared/fileutil"
 	"github.com/prysmaticlabs/prysm/shared/params"
-	bolt "go.etcd.io/bbolt"
 )
 
 const (
@@ -106,8 +106,4 @@ func (db *Store) Size() (int64, error) {
 		return nil
 	})
 	return size, err
-}
-
-func (db *Store) SavePublicKey(ctx context.Context, validatorIdx uint64, pubKey []byte) error {
-	return nil
 }

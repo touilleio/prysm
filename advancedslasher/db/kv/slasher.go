@@ -37,15 +37,20 @@ func (db *Store) LatestEpochWrittenForValidator(
 	return epoch, exists, err
 }
 
-// UpdateLatestEpochWrittenForValidator --
-func (db *Store) UpdateLatestEpochWrittenForValidator(ctx context.Context, validatorIdx, epoch uint64) error {
+// UpdateLatestEpochWrittenForValidators --
+func (db *Store) UpdateLatestEpochWrittenForValidators(ctx context.Context, validatorIndices []uint64, epoch uint64) error {
 	ctx, span := trace.StartSpan(ctx, "AdvancedSlasherDB.UpdateLatestEpochWrittenForValidator")
 	defer span.End()
 	return db.db.Update(func(tx *bolt.Tx) error {
 		bkt := tx.Bucket(epochByValidatorBucket)
-		key := ssz.MarshalUint64(make([]byte, 0), validatorIdx)
-		val := ssz.MarshalUint64(make([]byte, 0), epoch)
-		return bkt.Put(key, val)
+		for _, valIdx := range validatorIndices {
+			key := ssz.MarshalUint64(make([]byte, 0), valIdx)
+			val := ssz.MarshalUint64(make([]byte, 0), epoch)
+			if err := bkt.Put(key, val); err != nil {
+				return err
+			}
+		}
+		return nil
 	})
 }
 
@@ -94,7 +99,7 @@ func (db *Store) SaveAttestationRecordForValidator(
 	})
 }
 
-func (db *Store) LoadChunk(ctx context.Context, key uint64) ([]uint16, bool, error) {
+func (db *Store) LoadChunk(ctx context.Context, kind uint8, key uint64) ([]uint16, bool, error) {
 	ctx, span := trace.StartSpan(ctx, "AdvancedSlasherDB.LoadChunk")
 	defer span.End()
 	var chunk []uint16
@@ -102,6 +107,7 @@ func (db *Store) LoadChunk(ctx context.Context, key uint64) ([]uint16, bool, err
 	err := db.db.View(func(tx *bolt.Tx) error {
 		bkt := tx.Bucket(slasherChunksBucket)
 		keyBytes := ssz.MarshalUint64(make([]byte, 0), key)
+		keyBytes = append(ssz.MarshalUint8(make([]byte, 0), kind), keyBytes...)
 		chunkBytes := bkt.Get(keyBytes)
 		if chunkBytes == nil {
 			return nil
@@ -117,16 +123,22 @@ func (db *Store) LoadChunk(ctx context.Context, key uint64) ([]uint16, bool, err
 	return chunk, exists, err
 }
 
-func (db *Store) SaveChunk(ctx context.Context, key uint64, chunk []uint16) error {
-	ctx, span := trace.StartSpan(ctx, "AdvancedSlasherDB.SaveChunk")
+func (db *Store) SaveChunks(ctx context.Context, kind uint8, chunkKeys []uint64, chunks [][]uint16) error {
+	ctx, span := trace.StartSpan(ctx, "AdvancedSlasherDB.SaveChunks")
 	defer span.End()
 	return db.db.Update(func(tx *bolt.Tx) error {
 		bkt := tx.Bucket(slasherChunksBucket)
-		keyBytes := ssz.MarshalUint64(make([]byte, 0), key)
-		val := make([]byte, 0)
-		for i := 0; i < len(chunk); i++ {
-			val = append(val, ssz.MarshalUint16(make([]byte, 0), chunk[i])...)
+		for i := 0; i < len(chunkKeys); i++ {
+			keyBytes := ssz.MarshalUint64(make([]byte, 0), chunkKeys[i])
+			val := make([]byte, 0)
+			for j := 0; j < len(chunks[i]); j++ {
+				val = append(val, ssz.MarshalUint16(make([]byte, 0), chunks[i][j])...)
+			}
+			keyBytes = append(ssz.MarshalUint8(make([]byte, 0), kind), keyBytes...)
+			if err := bkt.Put(keyBytes, val); err != nil {
+				return err
+			}
 		}
-		return bkt.Put(keyBytes, val)
+		return nil
 	})
 }

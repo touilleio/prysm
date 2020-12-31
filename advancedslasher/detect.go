@@ -33,16 +33,14 @@ func (s *Slasher) detectAttestationBatch(
 	totalSlashings := append(slashings, moreSlashings...)
 	for _, sl := range totalSlashings {
 		if sl != notSlashable {
-			log.Infof("Slashing found: %d", sl)
+			log.Infof("Slashing found: %s", sl)
 		}
 	}
 
 	// Update all relevant validators for current epoch.
-	for _, validatorIdx := range s.config.validatorIndicesInChunk(validatorChunkIdx) {
-		err := s.slasherDB.UpdateLatestEpochWrittenForValidator(context.Background(), validatorIdx, currentEpoch)
-		if err != nil {
-			panic(err)
-		}
+	validatorIndices := s.config.validatorIndicesInChunk(validatorChunkIdx)
+	if err := s.slasherDB.UpdateLatestEpochWrittenForValidators(context.Background(), validatorIndices, currentEpoch); err != nil {
+		panic(err)
 	}
 }
 
@@ -80,12 +78,14 @@ func (s *Slasher) updateChunks(
 	}
 
 	// Store chunks on disk.
+	chunkKeys := make([]uint64, 0, len(updatedChunks))
+	chunks := make([][]uint16, 0, len(updatedChunks))
 	for chunkIdx, chunk := range updatedChunks {
-		key := s.config.diskKey(validatorChunkIdx, chunkIdx)
-		err := s.slasherDB.SaveChunk(context.Background(), key, chunk.Chunk())
-		if err != nil {
-			panic(err)
-		}
+		chunkKeys = append(chunkKeys, s.config.diskKey(validatorChunkIdx, chunkIdx))
+		chunks = append(chunks, chunk.Chunk())
+	}
+	if err := s.slasherDB.SaveChunks(context.Background(), uint8(kind), chunkKeys, chunks); err != nil {
+		panic(err)
 	}
 	return slashings
 }
@@ -141,13 +141,15 @@ func (s *Slasher) applyAttestationForValidator(
 	}
 	if slashable {
 		// TODO: Handle slashing appropriately.
-		log.Infof("Slashable with kind %v", slashKind)
 		return slashKind
 	}
 
 	// Get the first start epoch for max chunk.
 	// TODO: Check slashing status.
-	startEpoch := currentChunk.FirstStartEpoch(sourceEpoch, currentEpoch)
+	startEpoch, exists := currentChunk.FirstStartEpoch(sourceEpoch, currentEpoch)
+	if !exists {
+		return notSlashable
+	}
 
 	// Update the chunks accordingly.
 	for {
@@ -181,7 +183,7 @@ func (s *Slasher) chunkForUpdate(
 	}
 	// Load from DB, if it does not exist, then create an empty chunk.
 	key := s.config.diskKey(validatorChunkIndex, chunkIndex)
-	data, exists, err := s.slasherDB.LoadChunk(context.Background(), key)
+	data, exists, err := s.slasherDB.LoadChunk(context.Background(), uint8(kind), key)
 	if err != nil {
 		panic(err)
 	}

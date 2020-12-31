@@ -8,7 +8,6 @@ import (
 	ethpb "github.com/prysmaticlabs/ethereumapis/eth/v1alpha1"
 
 	"github.com/prysmaticlabs/prysm/advancedslasher/db"
-	"github.com/prysmaticlabs/prysm/shared/params"
 )
 
 var (
@@ -31,6 +30,21 @@ const (
 	surroundedVote
 )
 
+func (k slashingKind) String() string {
+	switch k {
+	case notSlashable:
+		return "NOT_SLASHABLE"
+	case doubleVote:
+		return "DOUBLE_VOTE"
+	case surroundingVote:
+		return "SURROUNDING_VOTE"
+	case surroundedVote:
+		return "SURROUNDED_VOTE"
+	default:
+		return "UNKNOWN"
+	}
+}
+
 type Chunker interface {
 	NeutralElement() uint16
 	Chunk() []uint16
@@ -46,7 +60,7 @@ type Chunker interface {
 		newTargetEpoch,
 		currentEpoch uint64,
 	) (bool, error)
-	FirstStartEpoch(sourceEpoch, currentEpoch uint64) uint64
+	FirstStartEpoch(sourceEpoch, currentEpoch uint64) (uint64, bool)
 	NextStartEpoch(startEpoch uint64) uint64
 }
 
@@ -92,15 +106,12 @@ func (m *MinChunk) CheckSlashable(
 	attestation *ethpb.IndexedAttestation,
 ) (bool, slashingKind, error) {
 	minTarget := getChunkTarget(m.data, validatorIdx, attestation.Data.Source.Epoch, m.config)
-	log.Infof("--Check min slashable, source %d, target %d", attestation.Data.Source.Epoch, attestation.Data.Target.Epoch)
 	if attestation.Data.Target.Epoch > minTarget {
 		existingAttRecord, err := slasherDB.AttestationRecordForValidator(context.Background(), validatorIdx, minTarget)
 		if err != nil {
 			return false, notSlashable, err
 		}
 		if existingAttRecord != nil {
-			log.Errorf("Att record, source %d target %d", existingAttRecord.SourceEpoch, existingAttRecord.TargetEpoch)
-			log.Infof("Source epoch %d < existing source epoch %d", attestation.Data.Source.Epoch, existingAttRecord.SourceEpoch)
 			if attestation.Data.Source.Epoch < existingAttRecord.SourceEpoch {
 				return true, surroundingVote, nil
 			}
@@ -114,29 +125,42 @@ func (m *MinChunk) Chunk() []uint16 {
 }
 
 func (m *MinChunk) Update(chunkIdx, validatorIdx, startEpoch, newTargetEpoch, currentEpoch uint64) (bool, error) {
-	// TODO: Make it a saturating sub.
-	minEpoch := currentEpoch - (m.config.historyLength - 1)
+	var minEpoch uint64
+	if currentEpoch > (m.config.historyLength - 1) {
+		minEpoch = currentEpoch - (m.config.historyLength - 1)
+	}
 	epoch := startEpoch
 	for m.config.chunkIndex(epoch) == chunkIdx && epoch >= minEpoch {
-		if newTargetEpoch < getChunkTarget(m.data, validatorIdx, epoch, m.config) {
+		chunkTarget := getChunkTarget(m.data, validatorIdx, epoch, m.config)
+		if newTargetEpoch < chunkTarget {
 			setChunkTarget(m.data, validatorIdx, epoch, newTargetEpoch, m.config)
 		} else {
 			// We can stop.
 			return false, nil
 		}
-		epoch -= 1
+		if epoch > 0 {
+			epoch -= 1
+		}
 	}
 	return epoch >= minEpoch, nil
 }
 
-func (m *MinChunk) FirstStartEpoch(sourceEpoch, currentEpoch uint64) uint64 {
-	if sourceEpoch > currentEpoch-m.config.historyLength {
+func (m *MinChunk) FirstStartEpoch(sourceEpoch, currentEpoch uint64) (uint64, bool) {
+	var difference uint64
+	if currentEpoch > m.config.historyLength {
+		difference = currentEpoch - m.config.historyLength
+	}
+	if sourceEpoch > difference {
 		if sourceEpoch == 0 {
 			panic("Cannot be 0")
 		}
-		return sourceEpoch - 1
+		var startEpoch uint64
+		if sourceEpoch > 0 {
+			startEpoch = sourceEpoch - 1
+		}
+		return startEpoch, true
 	} else {
-		return params.BeaconConfig().FarFutureEpoch
+		return 0, false
 	}
 }
 
@@ -179,15 +203,12 @@ func (m *MaxChunk) CheckSlashable(
 ) (bool, slashingKind, error) {
 	// TODO: Use right context.
 	maxTarget := getChunkTarget(m.data, validatorIdx, attestation.Data.Source.Epoch, m.config)
-	log.Infof("--Check max slashable, source %d, target %d", attestation.Data.Source.Epoch, attestation.Data.Target.Epoch)
 	if attestation.Data.Target.Epoch < maxTarget {
 		existingAttRecord, err := slasherDB.AttestationRecordForValidator(context.Background(), validatorIdx, maxTarget)
 		if err != nil {
 			return false, notSlashable, err
 		}
 		if existingAttRecord != nil {
-			log.Errorf("Att record %v", existingAttRecord)
-			log.Infof("Existing source epoch %d < source epoch %d", existingAttRecord.SourceEpoch, attestation.Data.Source.Epoch)
 			if existingAttRecord.SourceEpoch < attestation.Data.Source.Epoch {
 				return true, surroundedVote, nil
 			}
@@ -215,12 +236,11 @@ func (m *MaxChunk) Update(chunkIdx, validatorIdx, startEpoch, newTargetEpoch, cu
 	return epoch <= currentEpoch, nil
 }
 
-func (m *MaxChunk) FirstStartEpoch(sourceEpoch, currentEpoch uint64) uint64 {
+func (m *MaxChunk) FirstStartEpoch(sourceEpoch, currentEpoch uint64) (uint64, bool) {
 	if sourceEpoch < currentEpoch {
-		return sourceEpoch + 1
-	} else {
-		return params.BeaconConfig().FarFutureEpoch
+		return sourceEpoch + 1, true
 	}
+	return 0, false
 }
 
 // Move to first epoch of next chunk.

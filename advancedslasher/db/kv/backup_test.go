@@ -13,8 +13,6 @@ import (
 func TestStore_Backup(t *testing.T) {
 	db := setupDB(t)
 	ctx := context.Background()
-	pubKey := []byte("hello")
-	require.NoError(t, db.SavePubKey(ctx, uint64(1), pubKey))
 	require.NoError(t, db.Backup(ctx, ""))
 
 	backupsPath := filepath.Join(db.databasePath, backupsDirectoryName)

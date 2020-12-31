@@ -6,7 +6,6 @@ import (
 	"io"
 
 	ethpb "github.com/prysmaticlabs/ethereumapis/eth/v1alpha1"
-
 	"github.com/prysmaticlabs/prysm/advancedslasher/db/kv"
 	"github.com/prysmaticlabs/prysm/shared/backuputil"
 )
@@ -19,7 +18,7 @@ type Database interface {
 	ClearDB() error
 
 	// Epochs written.
-	UpdateLatestEpochWrittenForValidator(ctx context.Context, validatorIdx, epoch uint64) error
+	UpdateLatestEpochWrittenForValidators(ctx context.Context, validatorIndices []uint64, epoch uint64) error
 	LatestEpochWrittenForValidator(ctx context.Context, validatorIdx uint64) (uint64, bool, error)
 
 	// Attesting records.
@@ -31,6 +30,6 @@ type Database interface {
 	) error
 
 	// Chunks.
-	LoadChunk(ctx context.Context, key uint64) ([]uint16, bool, error)
-	SaveChunk(ctx context.Context, key uint64, chunk []uint16) error
+	LoadChunk(ctx context.Context, kind uint8, key uint64) ([]uint16, bool, error)
+	SaveChunks(ctx context.Context, kind uint8, chunkKeys []uint64, chunks [][]uint16) error
 }
