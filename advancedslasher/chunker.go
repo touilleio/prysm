@@ -92,15 +92,19 @@ func (m *MinChunk) CheckSlashable(
 	attestation *ethpb.IndexedAttestation,
 ) (bool, slashingKind, error) {
 	minTarget := getChunkTarget(m.data, validatorIdx, attestation.Data.Source.Epoch, m.config)
+	log.Infof("--Check min slashable, source %d, target %d", attestation.Data.Source.Epoch, attestation.Data.Target.Epoch)
 	if attestation.Data.Target.Epoch > minTarget {
 		existingAttRecord, err := slasherDB.AttestationRecordForValidator(context.Background(), validatorIdx, minTarget)
 		if err != nil {
 			return false, notSlashable, err
 		}
-		if attestation.Data.Source.Epoch < existingAttRecord.SourceEpoch {
-			return true, surroundingVote, nil
+		if existingAttRecord != nil {
+			log.Errorf("Att record, source %d target %d", existingAttRecord.SourceEpoch, existingAttRecord.TargetEpoch)
+			log.Infof("Source epoch %d < existing source epoch %d", attestation.Data.Source.Epoch, existingAttRecord.SourceEpoch)
+			if attestation.Data.Source.Epoch < existingAttRecord.SourceEpoch {
+				return true, surroundingVote, nil
+			}
 		}
-		return true, doubleVote, nil
 	}
 	return false, notSlashable, nil
 }
@@ -175,15 +179,19 @@ func (m *MaxChunk) CheckSlashable(
 ) (bool, slashingKind, error) {
 	// TODO: Use right context.
 	maxTarget := getChunkTarget(m.data, validatorIdx, attestation.Data.Source.Epoch, m.config)
+	log.Infof("--Check max slashable, source %d, target %d", attestation.Data.Source.Epoch, attestation.Data.Target.Epoch)
 	if attestation.Data.Target.Epoch < maxTarget {
 		existingAttRecord, err := slasherDB.AttestationRecordForValidator(context.Background(), validatorIdx, maxTarget)
 		if err != nil {
 			return false, notSlashable, err
 		}
-		if existingAttRecord.SourceEpoch < attestation.Data.Source.Epoch {
-			return true, surroundedVote, nil
+		if existingAttRecord != nil {
+			log.Errorf("Att record %v", existingAttRecord)
+			log.Infof("Existing source epoch %d < source epoch %d", existingAttRecord.SourceEpoch, attestation.Data.Source.Epoch)
+			if existingAttRecord.SourceEpoch < attestation.Data.Source.Epoch {
+				return true, surroundedVote, nil
+			}
 		}
-		return true, doubleVote, nil
 	}
 	return false, notSlashable, nil
 }

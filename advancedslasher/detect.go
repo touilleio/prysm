@@ -18,15 +18,12 @@ func (s *Slasher) detectAttestationBatch(
 	for _, att := range batch {
 		chunkIdx := s.config.chunkIndex(att.Data.Source.Epoch)
 		attestationsForChunk[chunkIdx] = append(attestationsForChunk[chunkIdx], att)
-		log.Infof("Detecting attestation in batch with chunk index %d", chunkIdx)
 	}
 
-	for _, validatorIdx := range s.config.validatorIndicesInChunk(validatorChunkIdx) {
-		for _, att := range batch {
-			err := s.slasherDB.SaveAttestationRecordForValidator(context.Background(), validatorIdx, att)
-			if err != nil {
-				panic(err)
-			}
+	for _, att := range batch {
+		err := s.slasherDB.SaveAttestationRecordForValidator(context.Background(), 1, att)
+		if err != nil {
+			panic(err)
 		}
 	}
 
@@ -34,7 +31,11 @@ func (s *Slasher) detectAttestationBatch(
 	moreSlashings := s.updateChunks(validatorChunkIdx, attestationsForChunk, currentEpoch, maxChunk)
 
 	totalSlashings := append(slashings, moreSlashings...)
-	log.Infof("Total slashings found in batch: %d", len(totalSlashings))
+	for _, sl := range totalSlashings {
+		if sl != notSlashable {
+			log.Infof("Slashing found: %d", sl)
+		}
+	}
 
 	// Update all relevant validators for current epoch.
 	for _, validatorIdx := range s.config.validatorIndicesInChunk(validatorChunkIdx) {
@@ -192,15 +193,16 @@ func (s *Slasher) chunkForUpdate(
 		case maxChunk:
 			existingChunk = NewMaxChunker(s.config)
 		}
-	}
-	switch kind {
-	case minChunk:
-		existingChunk, err = MinChunkFrom(s.config, data)
-	case maxChunk:
-		existingChunk, err = MaxChunkFrom(s.config, data)
-	}
-	if err != nil {
-		panic(err)
+	} else {
+		switch kind {
+		case minChunk:
+			existingChunk, err = MinChunkFrom(s.config, data)
+		case maxChunk:
+			existingChunk, err = MaxChunkFrom(s.config, data)
+		}
+		if err != nil {
+			panic(err)
+		}
 	}
 	updatedChunks[chunkIndex] = existingChunk
 	return existingChunk

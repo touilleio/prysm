@@ -2,9 +2,9 @@ package main
 
 import (
 	"context"
-	"time"
 
 	ethpb "github.com/prysmaticlabs/ethereumapis/eth/v1alpha1"
+
 	"github.com/prysmaticlabs/prysm/shared/slotutil"
 )
 
@@ -26,7 +26,7 @@ func (s *Slasher) receiveAttestations(ctx context.Context) {
 }
 
 func (s *Slasher) processQueuedAttestations(ctx context.Context) {
-	ticker := slotutil.GetEpochTicker(time.Now(), uint64(2) /* seconds per slot */)
+	ticker := slotutil.GetEpochTicker(s.genesisTime, s.secondsPerSlot*s.slotsPerEpoch)
 	defer ticker.Done()
 	for {
 		select {

@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"os"
+	"time"
 
 	"github.com/prysmaticlabs/prysm/advancedslasher/db/kv"
 	"github.com/prysmaticlabs/prysm/shared/event"
@@ -32,14 +33,26 @@ func main() {
 			panic(err)
 		}
 	}()
+
+	genesisTime := time.Now()
+	slotsPerEpoch := uint64(2)
+	secondsPerSlot := uint64(4)
+	log.Infof("Genesis time reached %v", genesisTime)
+
 	mockFeeder := &MockFeeder{
 		feed:             new(event.Feed),
 		validatorIndices: []uint64{1},
+		genesisTime:      genesisTime,
+		slotsPerEpoch:    slotsPerEpoch,
+		secondsPerSlot:   secondsPerSlot,
 	}
 	go mockFeeder.generateFakeAttestations(ctx)
 	slasher, err := NewSlasher(ctx, &ServiceConfig{
-		Feeder:    mockFeeder,
-		SlasherDB: slasherDB,
+		Feeder:         mockFeeder,
+		SlasherDB:      slasherDB,
+		GenesisTime:    genesisTime,
+		SlotsPerEpoch:  slotsPerEpoch,
+		SecondsPerSlot: secondsPerSlot,
 	})
 	if err != nil {
 		log.Fatal(err)
