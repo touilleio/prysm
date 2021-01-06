@@ -50,7 +50,6 @@ type Flags struct {
 	EnableSyncBacktracking             bool // EnableSyncBacktracking enables backtracking algorithm when searching for alternative forks during initial sync.
 	EnableLargerGossipHistory          bool // EnableLargerGossipHistory increases the gossip history we store in our caches.
 	WriteWalletPasswordOnWebOnboarding bool // WriteWalletPasswordOnWebOnboarding writes the password to disk after Prysm web signup.
-	DisableAttestingHistoryDBCache     bool // DisableAttestingHistoryDBCache for the validator client increases disk reads/writes.
 
 	// Logging related toggles.
 	DisableGRPCConnectionLogs bool // Disables logging when a new grpc client has connected.
@@ -223,10 +222,6 @@ func ConfigureValidator(ctx *cli.Context) {
 		log.Warn("Enabled full web mode, wallet password will be written to disk at the wallet directory " +
 			"upon completing web onboarding.")
 		cfg.WriteWalletPasswordOnWebOnboarding = true
-	}
-	if ctx.Bool(disableAttestingHistoryDBCache.Name) {
-		log.Warn("Disabled attesting history DB cache, likely increasing disk reads and writes significantly")
-		cfg.DisableAttestingHistoryDBCache = true
 	}
 	cfg.EnableBlst = true
 	if ctx.Bool(disableBlst.Name) {

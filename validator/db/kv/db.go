@@ -5,7 +5,6 @@ import (
 	"context"
 	"os"
 	"path/filepath"
-	"sync"
 
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
@@ -21,10 +20,8 @@ var ProtectionDbFileName = "validator.db"
 // Store defines an implementation of the Prysm Database interface
 // using BoltDB as the underlying persistent kv-store for eth2.
 type Store struct {
-	db                         *bolt.DB
-	databasePath               string
-	lock                       sync.RWMutex
-	attestingHistoriesByPubKey map[[48]byte]EncHistoryData
+	db           *bolt.DB
+	databasePath string
 }
 
 // Close closes the underlying boltdb database.
@@ -86,9 +83,8 @@ func NewKVStore(ctx context.Context, dirPath string, pubKeys [][48]byte) (*Store
 	}
 
 	kv := &Store{
-		db:                         boltDB,
-		databasePath:               dirPath,
-		attestingHistoriesByPubKey: make(map[[48]byte]EncHistoryData),
+		db:           boltDB,
+		databasePath: dirPath,
 	}
 
 	if err := kv.db.Update(func(tx *bolt.Tx) error {

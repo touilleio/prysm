@@ -17,9 +17,15 @@ var (
 		Usage:  deprecatedUsage,
 		Hidden: true,
 	}
+	deprecatedDisableAttestingHistoryDBCache = &cli.BoolFlag{
+		Name:   "disable-attesting-history-db-cache",
+		Usage:  deprecatedUsage,
+		Hidden: true,
+	}
 )
 
 var deprecatedFlags = []cli.Flag{
 	exampleDeprecatedFeatureFlag,
 	deprecatedDisableSyncBacktracking,
+	deprecatedDisableAttestingHistoryDBCache,
 }
