@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"sync"
 	"testing"
+	"time"
 
 	ethpb "github.com/prysmaticlabs/ethereumapis/eth/v1alpha1"
 	"github.com/prysmaticlabs/prysm/shared/bytesutil"
@@ -465,6 +466,73 @@ func BenchmarkStore_CheckSurroundVote_Surround_Slashable_54kEpochs(b *testing.B)
 	numEpochs := uint64(54000)
 	pubKeys := make([][48]byte, numValidators)
 	benchCheckSurroundVote(b, pubKeys, numEpochs, true /* surround */)
+}
+
+func TestStore_CheckSurroundVote_2000_Validators_20kEpochs(b *testing.T) {
+	ctx := context.Background()
+	numValidators := 2000
+	numEpochs := uint64(20000)
+	pubKeys := make([][48]byte, numValidators)
+	for i := 0; i < numValidators; i++ {
+		var pk [48]byte
+		copy(pk[:], fmt.Sprintf("%d", i))
+		pubKeys[i] = pk
+	}
+	validatorDB, err := NewKVStore(ctx, filepath.Join(os.TempDir(), "newsurroundvote"), pubKeys)
+	require.NoError(b, err, "Failed to instantiate DB")
+	defer func() {
+		require.NoError(b, validatorDB.Close(), "Failed to close database")
+		require.NoError(b, validatorDB.ClearDB(), "Failed to clear database")
+	}()
+	// Every validator will have attested every (source, target) sequential pair
+	// since genesis up to and including the weak subjectivity period epoch (54,000).
+	fmt.Println("Writing attestting history for 2000 keys")
+	err = validatorDB.update(func(tx *bolt.Tx) error {
+		for i, pubKey := range pubKeys {
+			bucket := tx.Bucket(pubKeysBucket)
+			pkBucket, err := bucket.CreateBucketIfNotExists(pubKey[:])
+			if err != nil {
+				return err
+			}
+			sourceEpochsBucket, err := pkBucket.CreateBucketIfNotExists(attestationSourceEpochsBucket)
+			if err != nil {
+				return err
+			}
+			fmt.Println("Writing 20k epochs for pubkey", pubKey)
+			for epoch := uint64(1); epoch < numEpochs; epoch++ {
+				att := createAttestation(epoch-1, epoch)
+				sourceEpoch := bytesutil.Uint64ToBytesBigEndian(att.Data.Source.Epoch)
+				targetEpoch := bytesutil.Uint64ToBytesBigEndian(att.Data.Target.Epoch)
+				if err := sourceEpochsBucket.Put(sourceEpoch, targetEpoch); err != nil {
+					return err
+				}
+			}
+			fmt.Println("Done writing 20k epochs for pubkey", i)
+		}
+		return nil
+	})
+	require.NoError(b, err)
+	fmt.Println("Done writing attestting history for 2000 keys")
+
+	incomingAtt := createAttestation(numEpochs+1, numEpochs+2)
+	//b.ResetTimer()
+	//for i := 0; i < b.N; i++ {
+	start := time.Now()
+	fmt.Println("Starting to check slashable attestation for 2000 vals, 20k epochs history")
+	var wg sync.WaitGroup
+	wg.Add(numValidators)
+	for _, pubKey := range pubKeys {
+		go func(w *sync.WaitGroup) {
+			defer w.Done()
+			slashingKind, err := validatorDB.CheckSlashableAttestation(ctx, pubKey, [32]byte{}, incomingAtt)
+			require.NoError(b, err)
+			require.Equal(b, NotSlashable, slashingKind)
+		}(&wg)
+	}
+	wg.Wait()
+	end := time.Now()
+	fmt.Printf("Took %v to check\n", end.Sub(start))
+	//}
 }
 
 func benchCheckSurroundVote(

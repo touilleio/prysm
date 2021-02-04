@@ -3,6 +3,8 @@ package db
 import (
 	"github.com/prysmaticlabs/prysm/shared/cmd"
 	"github.com/prysmaticlabs/prysm/shared/tos"
+	"github.com/prysmaticlabs/prysm/validator/db/kv"
+
 	"github.com/urfave/cli/v2"
 )
 
@@ -12,6 +14,19 @@ var DatabaseCommands = &cli.Command{
 	Category: "db",
 	Usage:    "defines commands for interacting with eth2 validator database",
 	Subcommands: []*cli.Command{
+		{
+			Name:        "test",
+			Description: `runs a benchmark`,
+			Flags: cmd.WrapFlags([]cli.Flag{
+				cmd.DataDirFlag,
+			}),
+			Action: func(cliCtx *cli.Context) error {
+				if err := kv.TestIT(cliCtx); err != nil {
+					log.Fatalf("Could not test database: %v", err)
+				}
+				return nil
+			},
+		},
 		{
 			Name:        "restore",
 			Description: `restores a database from a backup file`,
