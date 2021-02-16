@@ -1,10 +1,12 @@
 package db
 
 import (
+	"runtime"
+
 	"github.com/prysmaticlabs/prysm/shared/cmd"
+	"github.com/prysmaticlabs/prysm/shared/debug"
 	"github.com/prysmaticlabs/prysm/shared/tos"
 	"github.com/prysmaticlabs/prysm/validator/db/kv"
-
 	"github.com/urfave/cli/v2"
 )
 
@@ -19,7 +21,22 @@ var DatabaseCommands = &cli.Command{
 			Description: `runs a benchmark`,
 			Flags: cmd.WrapFlags([]cli.Flag{
 				cmd.DataDirFlag,
+				debug.PProfFlag,
+				debug.MemProfileRateFlag,
+				debug.MutexProfileFractionFlag,
+				debug.TraceFlag,
+				debug.CPUProfileFlag,
+				debug.PProfAddrFlag,
+				debug.PProfPortFlag,
 			}),
+			Before: func(cliCtx *cli.Context) error {
+				runtime.GOMAXPROCS(runtime.NumCPU())
+				return debug.Setup(cliCtx)
+			},
+			After: func(ctx *cli.Context) error {
+				debug.Exit(ctx)
+				return nil
+			},
 			Action: func(cliCtx *cli.Context) error {
 				if err := kv.TestIT(cliCtx); err != nil {
 					log.Fatalf("Could not test database: %v", err)
