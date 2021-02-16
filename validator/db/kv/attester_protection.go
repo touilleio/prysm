@@ -168,7 +168,7 @@ func (s *Store) CheckSlashableAttestation(
 		}
 		// Check for surround votes.
 
-		// Is this attestation surrounded by any other?
+		// Is this attestation surrounding any other?
 		// TODO: refactor to another method.
 		c := sourceEpochsBucket.Cursor()
 		// Iterate from the back of the bucket since we are looking for source_epoch > att.source_epoch
@@ -192,11 +192,11 @@ func (s *Store) CheckSlashableAttestation(
 						Target: &ethpb.Checkpoint{Epoch: existingTargetEpoch},
 					},
 				}
-				surrounded := slashutil.IsSurround(att, existingAtt)
-				if surrounded {
-					slashKind = SurroundedVote
+				surrounding := slashutil.IsSurround(att, existingAtt)
+				if surrounding {
+					slashKind = SurroundingVote
 					return fmt.Errorf(
-						surroundedVoteMessage,
+						surroundingVoteMessage,
 						att.Data.Source.Epoch,
 						att.Data.Target.Epoch,
 						existingSourceEpoch,
@@ -210,7 +210,7 @@ func (s *Store) CheckSlashableAttestation(
 			return nil
 		}
 
-		// Is this attestation surrounding any other?
+		// Is this attestation surrounded by any other?
 		// TODO: refactor to another method.
 		// Iterate from the back of the bucket since we are looking for target_epoch > att.target_epoch
 		c = targetEpochsBucket.Cursor()
@@ -234,11 +234,11 @@ func (s *Store) CheckSlashableAttestation(
 						Target: &ethpb.Checkpoint{Epoch: existingTargetEpoch},
 					},
 				}
-				surrounding := slashutil.IsSurround(existingAtt, att)
-				if surrounding {
-					slashKind = SurroundingVote
+				surrounded := slashutil.IsSurround(existingAtt, att)
+				if surrounded {
+					slashKind = SurroundedVote
 					return fmt.Errorf(
-						surroundingVoteMessage,
+						surroundedVoteMessage,
 						att.Data.Source.Epoch,
 						att.Data.Target.Epoch,
 						existingSourceEpoch,
