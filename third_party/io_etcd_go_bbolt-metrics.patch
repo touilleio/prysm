@@ -1,43 +1,21 @@
-diff -ur --exclude=.git a/BUILD.bazel b/BUILD.bazel
---- a/BUILD.bazel	2021-02-16 00:12:17.000000000 -0600
-+++ b/BUILD.bazel	2021-02-16 00:13:55.000000000 -0600
-@@ -40,11 +40,18 @@
-     deps = select({
-         "@io_bazel_rules_go//go/platform:aix": [
-             "@org_golang_x_sys//unix",
-+			"@com_github_prometheus_client_golang//prometheus:go_default_library",
-+			"@com_github_prometheus_client_golang//prometheus/promauto:go_default_library"
-         ],
-         "@io_bazel_rules_go//go/platform:solaris": [
-             "@org_golang_x_sys//unix",
-+			"@com_github_prometheus_client_golang//prometheus:go_default_library",
-+			"@com_github_prometheus_client_golang//prometheus/promauto:go_default_library"
-         ],
--        "//conditions:default": [],
-+		"//conditions:default": [
-+			"@com_github_prometheus_client_golang//prometheus:go_default_library",
-+			"@com_github_prometheus_client_golang//prometheus/promauto:go_default_library"
-+		],
-     }),
- )
-
-diff -ur --exclude=.git a/db.go b/db.go
---- a/db.go	2021-02-15 23:59:56.000000000 -0600
-+++ b/db.go	2021-02-16 00:03:38.000000000 -0600
-@@ -11,6 +11,9 @@
-    "sync"
-    "time"
-    "unsafe"
+diff --git a/db.go b/db.go
+index 80b0095..5d5b991 100644
+--- a/db.go
++++ b/db.go
+@@ -11,6 +11,9 @@ import (
+ 	"sync"
+ 	"time"
+ 	"unsafe"
 +
 +	"github.com/prometheus/client_golang/prometheus"
 +	"github.com/prometheus/client_golang/prometheus/promauto"
  )
-
+ 
  // The largest step that can be taken when remapping the mmap.
-@@ -40,6 +43,46 @@
- // default page size for db is set to the OS page size.
- var defaultPageSize = os.Getpagesize()
-
+@@ -53,6 +56,46 @@ const (
+ 	FreelistMapType = FreelistType("hashmap")
+ )
+ 
 +var (
 +	mmapSize = promauto.NewGauge(prometheus.GaugeOpts{
 +		Name: "bbolt_mmap_size",
@@ -78,61 +56,61 @@ diff -ur --exclude=.git a/db.go b/db.go
 +	)
 +)
 +
- // The time elapsed between consecutive file locking attempts.
- const flockRetryTimeout = 50 * time.Millisecond
-
-@@ -345,6 +388,7 @@
-    if err != nil {
-        return err
-    }
+ // DB represents a collection of buckets persisted to a file on disk.
+ // All data access is performed through transactions which can be obtained through the DB.
+ // All the functions on DB will return a ErrDatabaseNotOpen if accessed before Open() is called.
+@@ -345,6 +388,7 @@ func (db *DB) mmap(minsz int) error {
+ 	if err != nil {
+ 		return err
+ 	}
 +	mmapSize.Set(float64(size))
-
-    // Dereference all mmap references before unmapping.
-    if db.rwtx != nil {
-@@ -539,8 +583,10 @@
+ 
+ 	// Dereference all mmap references before unmapping.
+ 	if db.rwtx != nil {
+@@ -539,8 +583,10 @@ func (db *DB) close() error {
  // else the database will not reclaim old pages.
  func (db *DB) Begin(writable bool) (*Tx, error) {
-    if writable {
+ 	if writable {
 +		writableTxCount.Inc()
-        return db.beginRWTx()
-    }
+ 		return db.beginRWTx()
+ 	}
 +	readOnlyTxCount.Inc()
-    return db.beginTx()
+ 	return db.beginTx()
  }
-
-@@ -553,7 +599,10 @@
-    // Obtain a read-only lock on the mmap. When the mmap is remapped it will
-    // obtain a write lock so all transactions must finish before it can be
-    // remapped.
+ 
+@@ -553,7 +599,10 @@ func (db *DB) beginTx() (*Tx, error) {
+ 	// Obtain a read-only lock on the mmap. When the mmap is remapped it will
+ 	// obtain a write lock so all transactions must finish before it can be
+ 	// remapped.
 +	start := time.Now()
-    db.mmaplock.RLock()
+ 	db.mmaplock.RLock()
 +	duration := time.Now().Sub(start)
 +	readWriteTxLockWaitTime.Observe(float64(duration.Milliseconds()))
-
-    // Exit if the database is not open yet.
-    if !db.opened {
-@@ -590,7 +639,10 @@
-
-    // Obtain writer lock. This is released by the transaction when it closes.
-    // This enforces only one writer transaction at a time.
+ 
+ 	// Exit if the database is not open yet.
+ 	if !db.opened {
+@@ -590,7 +639,10 @@ func (db *DB) beginRWTx() (*Tx, error) {
+ 
+ 	// Obtain writer lock. This is released by the transaction when it closes.
+ 	// This enforces only one writer transaction at a time.
 +	start := time.Now()
-    db.rwlock.Lock()
+ 	db.rwlock.Lock()
 +	duration := time.Now().Sub(start)
 +	readWriteTxLockWaitTime.Observe(float64(duration.Milliseconds()))
-
-    // Once we have the writer lock then we can lock the meta pages so that
-    // we can set up the transaction.
-@@ -936,9 +988,13 @@
-    p.id = db.rwtx.meta.pgid
-    var minsz = int((p.id+pgid(count))+1) * db.pageSize
-    if minsz >= db.datasz {
+ 
+ 	// Once we have the writer lock then we can lock the meta pages so that
+ 	// we can set up the transaction.
+@@ -936,9 +988,13 @@ func (db *DB) allocate(txid txid, count int) (*page, error) {
+ 	p.id = db.rwtx.meta.pgid
+ 	var minsz = int((p.id+pgid(count))+1) * db.pageSize
+ 	if minsz >= db.datasz {
 +		numMmapResizes.Inc()
 +		start := time.Now()
-        if err := db.mmap(minsz); err != nil {
-            return nil, fmt.Errorf("mmap allocate error: %s", err)
-        }
+ 		if err := db.mmap(minsz); err != nil {
+ 			return nil, fmt.Errorf("mmap allocate error: %s", err)
+ 		}
 +		duration := time.Now().Sub(start)
 +		mmapWaitTime.Observe(float64(duration.Milliseconds()))
-    }
-
-    // Move the page id high water mark.
+ 	}
+ 
+ 	// Move the page id high water mark.
