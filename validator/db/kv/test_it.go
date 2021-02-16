@@ -103,7 +103,7 @@ func attest(
 	currentEpoch := helpers.SlotToEpoch(slot)
 	source := currentEpoch - 1
 	target := currentEpoch
-	incomingAtt := createAttestation(slot, source, target)
+	incomingAtt := _createAttestation(slot, source, target)
 	signingRoot, err := incomingAtt.Data.HashTreeRoot()
 	if err != nil {
 		log.WithError(err).Error("Could not compute signing root")
@@ -182,7 +182,7 @@ func waitOneThird(ctx context.Context, slot types.Slot) {
 	}
 }
 
-func createAttestation(slot types.Slot, source, target types.Epoch) *ethpb.IndexedAttestation {
+func _createAttestation(slot types.Slot, source, target types.Epoch) *ethpb.IndexedAttestation {
 	return &ethpb.IndexedAttestation{
 		Data: &ethpb.AttestationData{
 			Slot:            slot,

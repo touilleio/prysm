@@ -192,7 +192,7 @@ func (s *Store) CheckSlashableAttestation(
 						Target: &ethpb.Checkpoint{Epoch: existingTargetEpoch},
 					},
 				}
-				surrounded := slashutil.IsSurround(existingAtt, att)
+				surrounded := slashutil.IsSurround(att, existingAtt)
 				if surrounded {
 					slashKind = SurroundedVote
 					return fmt.Errorf(
@@ -234,7 +234,7 @@ func (s *Store) CheckSlashableAttestation(
 						Target: &ethpb.Checkpoint{Epoch: existingTargetEpoch},
 					},
 				}
-				surrounding := slashutil.IsSurround(att, existingAtt)
+				surrounding := slashutil.IsSurround(existingAtt, att)
 				if surrounding {
 					slashKind = SurroundingVote
 					return fmt.Errorf(

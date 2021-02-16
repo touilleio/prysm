@@ -157,6 +157,10 @@ func TestStore_CheckSlashableAttestation_SurroundVote_54kEpochs(t *testing.T) {
 		if err != nil {
 			return err
 		}
+		targetEpochsBucket, err := pkBucket.CreateBucketIfNotExists(attestationTargetEpochsBucket)
+		if err != nil {
+			return err
+		}
 		for epoch := types.Epoch(1); epoch < numEpochs; epoch++ {
 			att := createAttestation(epoch-1, epoch)
 			sourceEpoch := bytesutil.EpochToBytesBigEndian(att.Data.Source.Epoch)
@@ -164,7 +168,11 @@ func TestStore_CheckSlashableAttestation_SurroundVote_54kEpochs(t *testing.T) {
 			if err := sourceEpochsBucket.Put(sourceEpoch, targetEpoch); err != nil {
 				return err
 			}
+			if err := targetEpochsBucket.Put(targetEpoch, sourceEpoch); err != nil {
+				return err
+			}
 		}
+
 		return nil
 	})
 	require.NoError(t, err)
