@@ -3365,10 +3365,6 @@ def prysm_deps():
         name = "io_etcd_go_bbolt",
         importpath = "go.etcd.io/bbolt",
         patch_args = ["-p1"],
-        build_directives = [
-            "gazelle:resolve go github.com/prometheus/client_golang/prometheus @com_github_prometheus_client_golang//prometheus:go_default_library",
-        ],
-        build_file_generation = "on",
         patches = ["@prysm//third_party:io_etcd_go_bbolt-metrics.patch"],
         sum = "h1:XAzx9gjCb0Rxj7EoqcClPD1d5ZBxZJk0jbuoPHenBt0=",
         version = "v1.3.5",

@@ -1,8 +1,30 @@
-diff --git a/db.go b/db.go
-index 80b0095..5d5b991 100644
---- a/db.go
-+++ b/db.go
-@@ -11,6 +11,9 @@ import (
+diff -ur --exclude=.git a/BUILD.bazel b/BUILD.bazel
+--- a/BUILD.bazel	2021-02-16 09:35:54.000000000 -0600
++++ b/BUILD.bazel	2021-02-16 10:13:47.000000000 -0600
+@@ -40,11 +40,18 @@
+     deps = select({
+         "@io_bazel_rules_go//go/platform:aix": [
+             "@org_golang_x_sys//unix",
++			"@com_github_prometheus_client_golang//prometheus:go_default_library",
++			"@com_github_prometheus_client_golang//prometheus/promauto:go_default_library",
+         ],
+         "@io_bazel_rules_go//go/platform:solaris": [
+             "@org_golang_x_sys//unix",
++			"@com_github_prometheus_client_golang//prometheus:go_default_library",
++			"@com_github_prometheus_client_golang//prometheus/promauto:go_default_library",
+         ],
+-        "//conditions:default": [],
++		"//conditions:default": [
++			"@com_github_prometheus_client_golang//prometheus:go_default_library",
++			"@com_github_prometheus_client_golang//prometheus/promauto:go_default_library",
++		],
+     }),
+ )
+ 
+diff -ur --exclude=.git a/db.go b/db.go
+--- a/db.go	2021-02-16 09:30:40.000000000 -0600
++++ b/db.go	2021-02-16 09:33:26.000000000 -0600
+@@ -11,6 +11,9 @@
  	"sync"
  	"time"
  	"unsafe"
@@ -12,7 +34,7 @@ index 80b0095..5d5b991 100644
  )
  
  // The largest step that can be taken when remapping the mmap.
-@@ -53,6 +56,46 @@ const (
+@@ -53,6 +56,46 @@
  	FreelistMapType = FreelistType("hashmap")
  )
  
@@ -59,7 +81,7 @@ index 80b0095..5d5b991 100644
  // DB represents a collection of buckets persisted to a file on disk.
  // All data access is performed through transactions which can be obtained through the DB.
  // All the functions on DB will return a ErrDatabaseNotOpen if accessed before Open() is called.
-@@ -345,6 +388,7 @@ func (db *DB) mmap(minsz int) error {
+@@ -345,6 +388,7 @@
  	if err != nil {
  		return err
  	}
@@ -67,7 +89,7 @@ index 80b0095..5d5b991 100644
  
  	// Dereference all mmap references before unmapping.
  	if db.rwtx != nil {
-@@ -539,8 +583,10 @@ func (db *DB) close() error {
+@@ -539,8 +583,10 @@
  // else the database will not reclaim old pages.
  func (db *DB) Begin(writable bool) (*Tx, error) {
  	if writable {
@@ -78,7 +100,7 @@ index 80b0095..5d5b991 100644
  	return db.beginTx()
  }
  
-@@ -553,7 +599,10 @@ func (db *DB) beginTx() (*Tx, error) {
+@@ -553,7 +599,10 @@
  	// Obtain a read-only lock on the mmap. When the mmap is remapped it will
  	// obtain a write lock so all transactions must finish before it can be
  	// remapped.
@@ -89,7 +111,7 @@ index 80b0095..5d5b991 100644
  
  	// Exit if the database is not open yet.
  	if !db.opened {
-@@ -590,7 +639,10 @@ func (db *DB) beginRWTx() (*Tx, error) {
+@@ -590,7 +639,10 @@
  
  	// Obtain writer lock. This is released by the transaction when it closes.
  	// This enforces only one writer transaction at a time.
@@ -100,7 +122,7 @@ index 80b0095..5d5b991 100644
  
  	// Once we have the writer lock then we can lock the meta pages so that
  	// we can set up the transaction.
-@@ -936,9 +988,13 @@ func (db *DB) allocate(txid txid, count int) (*page, error) {
+@@ -936,9 +988,13 @@
  	p.id = db.rwtx.meta.pgid
  	var minsz = int((p.id+pgid(count))+1) * db.pageSize
  	if minsz >= db.datasz {
