@@ -66,6 +66,7 @@ func TestIT(cliCtx *cli.Context) error {
 				"deadline", deadline,
 			).Debug("Set deadline for attestations")
 
+			startAttest := time.Now()
 			var wg sync.WaitGroup
 			for _, pubKey := range assignedKeys {
 				wg.Add(1)
@@ -81,6 +82,7 @@ func TestIT(cliCtx *cli.Context) error {
 					"slotInEpoch":  inEpoch,
 					"epoch":        helpers.SlotToEpoch(slot),
 					"numAttesters": len(assignedKeys),
+					"timeElapsed":  time.Now().Sub(startAttest),
 				}).Info("Completed attest function for all assigned validators")
 			}()
 		}
