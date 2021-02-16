@@ -24,6 +24,7 @@ const (
 var pyrmontGenesisTime = time.Unix(1605700807, 0)
 
 func TestIT(cliCtx *cli.Context) error {
+	logrus.SetLevel(logrus.DebugLevel)
 	dataDir := cliCtx.String(cmd.DataDirFlag.Name)
 	ctx := context.Background()
 	validatorDB, err := NewKVStore(ctx, dataDir, &Config{
@@ -59,7 +60,8 @@ func TestIT(cliCtx *cli.Context) error {
 			}).Info("Slot reached")
 
 			deadline := slotDeadline(slot)
-			slotCtx, _ := context.WithDeadline(ctx, deadline)
+			slotCtx, cancel := context.WithDeadline(ctx, deadline)
+			_ = cancel
 			log.WithField(
 				"deadline", deadline,
 			).Debug("Set deadline for attestations")
@@ -95,7 +97,7 @@ func attest(
 	currentEpoch := helpers.SlotToEpoch(slot)
 	source := currentEpoch - 1
 	target := currentEpoch
-	incomingAtt := createAttestation(source, target)
+	incomingAtt := createAttestation(slot, source, target)
 	signingRoot, err := incomingAtt.Data.HashTreeRoot()
 	if err != nil {
 		log.WithError(err).Error("Could not compute signing root")
@@ -174,11 +176,14 @@ func waitOneThird(ctx context.Context, slot types.Slot) {
 	}
 }
 
-func createAttestation(source, target types.Epoch) *ethpb.IndexedAttestation {
+func createAttestation(slot types.Slot, source, target types.Epoch) *ethpb.IndexedAttestation {
 	return &ethpb.IndexedAttestation{
 		Data: &ethpb.AttestationData{
-			Source: &ethpb.Checkpoint{Epoch: source},
-			Target: &ethpb.Checkpoint{Epoch: target},
+			Slot:            slot,
+			CommitteeIndex:  1,
+			BeaconBlockRoot: make([]byte, 32),
+			Source:          &ethpb.Checkpoint{Epoch: source, Root: make([]byte, 32)},
+			Target:          &ethpb.Checkpoint{Epoch: target, Root: make([]byte, 32)},
 		},
 	}
 }
