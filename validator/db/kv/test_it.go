@@ -33,6 +33,10 @@ func TestIT(cliCtx *cli.Context) error {
 	if err != nil {
 		return err
 	}
+	log.Info("Runnning migrations")
+	if err := validatorDB.RunUpMigrations(ctx); err != nil {
+		return err
+	}
 	publicKeys, err := fetchAttestedPublicKeys(validatorDB)
 	if err != nil {
 		return err

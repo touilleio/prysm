@@ -10,7 +10,9 @@ type migration func(*bolt.Tx) error
 
 var (
 	migrationCompleted = []byte("done")
-	upMigrations       []migration
+	upMigrations       = []migration{
+		// migrateSourceTargetEpochsBucket, // TODO: this is really slow
+	}
 	downMigrations     []migration
 )
 
