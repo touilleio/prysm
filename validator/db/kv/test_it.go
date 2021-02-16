@@ -2,22 +2,19 @@ package kv
 
 import (
 	"context"
+	"sync"
 	"time"
 
 	types "github.com/prysmaticlabs/eth2-types"
 	ethpb "github.com/prysmaticlabs/ethereumapis/eth/v1alpha1"
 	"github.com/prysmaticlabs/prysm/beacon-chain/core/helpers"
 	"github.com/prysmaticlabs/prysm/shared/cmd"
-	"github.com/prysmaticlabs/prysm/shared/featureconfig"
 	"github.com/prysmaticlabs/prysm/shared/params"
 	"github.com/prysmaticlabs/prysm/shared/slotutil"
 	"github.com/prysmaticlabs/prysm/shared/timeutils"
-	"github.com/prysmaticlabs/prysm/shared/traceutil"
-
 	"github.com/sirupsen/logrus"
 	"github.com/urfave/cli/v2"
 	bolt "go.etcd.io/bbolt"
-	"go.opencensus.io/trace"
 )
 
 const (
@@ -62,44 +59,61 @@ func TestIT(cliCtx *cli.Context) error {
 			}).Info("Slot reached")
 
 			deadline := slotDeadline(slot)
-			slotCtx, cancel := context.WithDeadline(ctx, deadline)
+			slotCtx, _ := context.WithDeadline(ctx, deadline)
 			log.WithField(
 				"deadline", deadline,
 			).Debug("Set deadline for attestations")
-			go attest()
+
+			var wg sync.WaitGroup
+			for _, pubKey := range assignedKeys {
+				wg.Add(1)
+				go func(pk [48]byte) {
+					defer wg.Done()
+					attest(slotCtx, validatorDB, pk, slot)
+				}(pubKey)
+			}
+			go func() {
+				wg.Wait()
+				log.WithFields(logrus.Fields{
+					"slot":         slot,
+					"slotInEpoch":  inEpoch,
+					"epoch":        helpers.SlotToEpoch(slot),
+					"numAttesters": len(assignedKeys),
+				}).Info("Completed attest function for all assigned validators")
+			}()
 		}
 	}
-
-	//for _, pubKey := range publicKeys {
-	//	log.Infof("Public key %#x", pubKey)
-	//}
-
-	//start := time.Now()
-	//fmt.Println("Starting to check slashable attestation for 2000 vals, 20k epochs history")
-	//var wg sync.WaitGroup
-	//wg.Add(numValidators)
-	//for _, pubKey := range pubKeys {
-	//	go func(w *sync.WaitGroup, pk [48]byte) {
-	//		defer w.Done()
-	//		incomingAtt := createAttestation(numEpochs+1, numEpochs+2)
-	//		_, err = validatorDB.CheckSlashableAttestation(ctx, pk, [32]byte{}, incomingAtt)
-	//		if err != nil {
-	//			panic(err)
-	//		}
-	//	}(&wg, pubKey)
-	//}
-	//wg.Wait()
-	//end := time.Now()
-	//fmt.Printf("Took %v to check\n", end.Sub(start))
-	//return nil
 }
 
-func attest(validatorDB *Store) {
-	incomingAtt := createAttestation(numEpochs+1, numEpochs+2)
-	_, err = validatorDB.CheckSlashableAttestation(ctx, pk, [32]byte{}, incomingAtt)
+func attest(
+	ctx context.Context,
+	validatorDB *Store,
+	pubKey [48]byte,
+	slot types.Slot,
+) {
+	waitOneThird(ctx, slot)
+	currentEpoch := helpers.SlotToEpoch(slot)
+	source := currentEpoch - 1
+	target := currentEpoch
+	incomingAtt := createAttestation(source, target)
+	signingRoot, err := incomingAtt.Data.HashTreeRoot()
 	if err != nil {
-		panic(err)
+		log.WithError(err).Error("Could not compute signing root")
+		return
 	}
+	slashable, err := validatorDB.CheckSlashableAttestation(ctx, pubKey, signingRoot, incomingAtt)
+	if err != nil {
+		log.WithError(err).Error("Could not check slashable attestation for public key")
+		return
+	}
+	if slashable != NotSlashable {
+		log.Warn("Attempted to produce slashable attestation")
+		return
+	}
+	if err := validatorDB.SaveAttestationForPubKey(ctx, pubKey, signingRoot, incomingAtt); err != nil {
+		log.WithError(err).Error("Could not save attestation for public key")
+	}
+	return
 }
 
 func fetchAttestedPublicKeys(validatorDB *Store) ([][48]byte, error) {
@@ -140,17 +154,9 @@ func slotDeadline(slot types.Slot) time.Time {
 	return pyrmontGenesisTime.Add(secs * time.Second)
 }
 
-func (v *validator) waitOneThirdOrValidBlock(ctx context.Context, slot types.Slot) {
-	ctx, span := trace.StartSpan(ctx, "validator.waitOneThirdOrValidBlock")
-	defer span.End()
-
-	// Don't need to wait if requested slot is the same as highest valid slot.
-	if slot <= v.highestValidSlot {
-		return
-	}
-
+func waitOneThird(ctx context.Context, slot types.Slot) {
 	delay := slotutil.DivideSlotBy(3 /* a third of the slot duration */)
-	startTime := slotutil.SlotStartTime(v.genesisTime, slot)
+	startTime := slotutil.SlotStartTime(uint64(pyrmontGenesisTime.Unix()), slot)
 	finalTime := startTime.Add(delay)
 	wait := timeutils.Until(finalTime)
 	if wait <= 0 {
@@ -158,24 +164,9 @@ func (v *validator) waitOneThirdOrValidBlock(ctx context.Context, slot types.Slo
 	}
 	t := time.NewTimer(wait)
 	defer t.Stop()
-
-	bChannel := make(chan *ethpb.SignedBeaconBlock, 1)
-	sub := v.blockFeed.Subscribe(bChannel)
-	defer sub.Unsubscribe()
-
 	for {
 		select {
-		case b := <-bChannel:
-			if featureconfig.Get().AttestTimely {
-				if slot <= b.Block.Slot {
-					return
-				}
-			}
 		case <-ctx.Done():
-			traceutil.AnnotateError(span, ctx.Err())
-			return
-		case <-sub.Err():
-			log.Error("Subscriber closed, exiting goroutine")
 			return
 		case <-t.C:
 			return
