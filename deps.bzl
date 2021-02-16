@@ -3364,6 +3364,8 @@ def prysm_deps():
     go_repository(
         name = "io_etcd_go_bbolt",
         importpath = "go.etcd.io/bbolt",
+        patch_args = ["-p1"],
+        patches = ["@prysm//third_party:io_etcd_go_bbolt-metrics.patch"],
         sum = "h1:XAzx9gjCb0Rxj7EoqcClPD1d5ZBxZJk0jbuoPHenBt0=",
         version = "v1.3.5",
     )
