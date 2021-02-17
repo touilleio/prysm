@@ -3,8 +3,8 @@ package kv
 import (
 	"bytes"
 	"context"
-	"errors"
 
+	"github.com/prysmaticlabs/prysm/shared/progressutil"
 	bolt "go.etcd.io/bbolt"
 )
 
@@ -34,55 +34,54 @@ func (s *Store) migrateSourceTargetEpochsBucketUp(ctx context.Context) error {
 	}
 
 	// Next up, we initiate a bolt transaction for each public key.
+	bar := progressutil.InitializeProgressBar(
+		len(publicKeyBytes), "Adding optimizations for validator slashing protection",
+	)
 	for _, pubKey := range publicKeyBytes {
 		err = s.db.Update(func(tx *bolt.Tx) error {
-			return nil
+			bkt := tx.Bucket(pubKeysBucket)
+			pkb := bkt.Bucket(pubKey)
+			sourceBucket := pkb.Bucket(attestationSourceEpochsBucket)
+			if sourceBucket == nil {
+				return nil
+			}
+			targetBucket, err := pkb.CreateBucketIfNotExists(attestationTargetEpochsBucket)
+			if err != nil {
+				return err
+			}
+			return sourceBucket.ForEach(func(sourceEpochBytes, targetEpochsBytes []byte) error {
+				for i := 0; i < len(targetEpochsBytes); i += 8 {
+					if err := insertTargetSource(
+						targetBucket,
+						targetEpochsBytes[i:i+8],
+						sourceEpochBytes,
+					); err != nil {
+						return err
+					}
+				}
+				return nil
+			})
 		})
 		if err != nil {
 			return err
 		}
+		if err := bar.Add(1); err != nil {
+			return err
+		}
 	}
-	return nil
+
+	// Finally we mark the migration as completed.
+	return s.db.Update(func(tx *bolt.Tx) error {
+		mb := tx.Bucket(migrationsBucket)
+		return mb.Put(migrationSourceTargetEpochsBucketKey, migrationCompleted)
+	})
 }
 
-func migrateSourceTargetEpochsBucket(tx *bolt.Tx) error {
-	mb := tx.Bucket(migrationsBucket)
-	if v := mb.Get(migrationSourceTargetEpochsBucketKey); bytes.Equal(v, migrationCompleted) {
-		return nil
-	}
-
-	pksBucket := tx.Bucket(pubKeysBucket)
-	err := pksBucket.ForEach(func(pk, _ []byte) error {
-		pkb := pksBucket.Bucket(pk)
-		if pkb == nil {
-			return errors.New("nil bucket entry in pubkeys bucket")
-		}
-
-		sourceBucket := pkb.Bucket(attestationSourceEpochsBucket)
-		if sourceBucket == nil {
-			return nil
-		}
-
-		targetBucket, err := pkb.CreateBucketIfNotExists(attestationTargetEpochsBucket)
-		if err != nil {
-			return err
-		}
-
-		return sourceBucket.ForEach(func(sourceEpochBytes, targetEpochsBytes []byte) error {
-			for i := 0; i < len(targetEpochsBytes); i += 8 {
-				if err := insertTargetSource(targetBucket, targetEpochsBytes[i:i+8], sourceEpochBytes); err != nil {
-					return err
-				}
-			}
-			return nil
-		})
+func (s *Store) migrateSourceTargetEpochsBucketDown(ctx context.Context) error {
+	return s.db.Update(func(tx *bolt.Tx) error {
+		migrationsBkt := tx.Bucket(migrationsBucket)
+		return migrationsBkt.Delete(migrationOptimalAttesterProtectionKey)
 	})
-
-	if err != nil {
-		return err
-	}
-
-	return mb.Put(migrationSourceTargetEpochsBucketKey, migrationCompleted)
 }
 
 func insertTargetSource(bkt *bolt.Bucket, targetEpochBytes, sourceEpochBytes []byte) error {
